@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CSV to JSON</title>
+</head>
+<body>
+    <h1>Ren Moromasa</h1>
+    <h3><i>Group 1 - IT 3206N M W 06:00 PM - 08:30 PM</i></h3>
+    <hr>
+
+    <h2>1. Upload CSV</h2>
+    <input type="file" id="csvFile" accept=".csv">
+    <button type="button" onclick="convertCSV()">Convert to JSON</button>
+
+    <h2>2. Output JSON</h2>
+    <pre id="jsonOutput">Select a CSV file and click "Convert to JSON".</pre>
+
+    <script>
+        const PROGRAM_MAP = {
+            BSIT: "Bachelor of Science in Information Technology",
+            BSCS: "Bachelor of Science in Computer Science"
+        };
+
+        const REQUIRED_HEADERS = [
+            "student_id", "first_name", "last_name",
+            "course", "year_level", "email", "tuition_balance"
+        ];
+
+        let convertedData = [];
+
+        function tokenizeLine(text) {
+            const cols = [];
+            let buffer = "";
+            let inQuotes = false;
+
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+
+                if (char === '"') {
+                    if (inQuotes && text[i + 1] === '"') {
+                        buffer += '"';
+                        i++;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                } else if (char === ',' && !inQuotes) {
+                    cols.push(buffer);
+                    buffer = "";
+                } else {
+                    buffer += char;
+                }
+            }
+            cols.push(buffer);
+            return cols;
+        }
+
+        function formatName(name) {
+            return name.trim().toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+        }
+
+        function convertCSV() {
+            const fileInput = document.getElementById("csvFile");
+            const outputArea = document.getElementById("jsonOutput");
+            const file = fileInput.files[0];
+
+            if (!file) {
+                outputArea.textContent = "Please select a CSV file first.";
+                return;
+            }
+
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                const content = e.target.result.replace(/^\uFEFF/, "").trim();
+                if (!content) {
+                    outputArea.textContent = "The uploaded file is empty.";
+                    return;
+                }
+
+                const lines = content.split(/\r?\n/).filter(line => line.trim() !== "");
+                if (lines.length <= 1) {
+                    outputArea.textContent = "CSV file contains no data rows.";
+                    return;
+                }
+
+                const headers = tokenizeLine(lines[0]).map(h => h.trim().toLowerCase());
+                const missing = REQUIRED_HEADERS.filter(col => !headers.includes(col));
+
+                if (missing.length > 0) {
+                    outputArea.textContent = "Missing expected column(s): " + missing.join(", ");
+                    return;
+                }
+
+                try {
+                    convertedData = [];
+
+                    for (let i = 1; i < lines.length; i++) {
+                        const values = tokenizeLine(lines[i]);
+                        const row = {};
+
+                        headers.forEach((h, idx) => {
+                            row[h] = (values[idx] || "").trim();
+                        });
+
+                        const rowNumber = i + 1;
+                        const studentId = parseInt(row.student_id, 10);
+                        const yearLevel = parseInt(row.year_level, 10);
+                        const balance = Number(row.tuition_balance);
+                        const courseCode = (row.course || "").toUpperCase();
+
+                        if (isNaN(studentId) || isNaN(yearLevel) || isNaN(balance) || row.tuition_balance === "") {
+                            throw new Error(`Row ${rowNumber}: Invalid numeric value found.`);
+                        }
+
+                        if (!PROGRAM_MAP[courseCode]) {
+                            throw new Error(`Row ${rowNumber}: Unknown program course code "${row.course}".`);
+                        }
+
+                        convertedData.push({
+                            studentId: studentId,
+                            firstName: formatName(row.first_name),
+                            lastName: formatName(row.last_name),
+                            program: PROGRAM_MAP[courseCode],
+                            yearLevel: yearLevel,
+                            emailAddress: row.email.toLowerCase(),
+                            outstandingBalance: balance
+                        });
+                    }
+
+                    outputArea.textContent = JSON.stringify(convertedData, null, 4);
+
+                } catch (err) {
+                    convertedData = [];
+                    outputArea.textContent = "Error: " + err.message;
+                }
+            };
+
+            reader.onerror = function() {
+                outputArea.textContent = "Failed to read the file.";
+            };
+
+            reader.readAsText(file);
+        }
+    </script>
+</body>
+</html>
